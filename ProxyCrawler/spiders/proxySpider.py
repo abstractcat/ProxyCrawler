@@ -9,6 +9,8 @@ from scrapy.spider import Request
 from scrapy import Selector
 import PyV8
 
+from ProxyCrawler.items import ProxyItem
+
 from abstractcat.db import postgres
 
 
@@ -18,14 +20,17 @@ class ProxySpider(Spider):
         self.db = postgres.PostgresConn()
 
     name = "proxy"
-    allowed_domains = ['site-digger.com', 'proxy.com.ru', 'baidu.com']
+    allowed_domains = ['site-digger.com', 'proxy.com.ru', 'kuaidaili.com', 'baidu.com']
 
     def start_requests(self):
         url_sitedigger = 'http://www.site-digger.com/html/articles/20110516/proxieslist.html'
         url_proxy = 'http://www.proxy.com.ru'
+        url_kuaidaili = 'http://www.kuaidaili.com/free/inha/'
 
+        yield Request(url=url_kuaidaili, callback=self.parse_kuaidaili)
         yield Request(url=url_sitedigger, callback=self.parse_sitedigger)
         yield Request(url=url_proxy, callback=self.parse_proxy)
+
 
     def parse_proxy(self, response):
         print(response.request.url)
@@ -37,9 +42,8 @@ class ProxySpider(Spider):
         list = re.findall(pattern, html)
         list = map(lambda x: x[0] + ':' + x[1], list)
         for address in list:
-            proxy = 'http://%s' % address
-            yield Request(url='https://www.baidu.com/s?wd=%s' % address, callback=self.check_ok, errback=self.check_error,
-                          meta={'proxy': proxy})
+            (ip, port) = address.split(':')
+            yield ProxyItem(ip=ip, port=port)
 
         links = response.xpath('//a/@href').extract()
         for link in links:
@@ -64,19 +68,23 @@ class ProxySpider(Spider):
         encrypt_ips = response.xpath('//script/text()').re('document.write\(decrypt\("(.*?)"\)\)')
         for code in encrypt_ips:
             address = ctxt.eval('decrypt("%s")' % code)
-            proxy = 'http://%s' % address
-            yield Request(url='https://www.baidu.com/s?wd=%s' % address, callback=self.check_ok, errback=self.check_error,
-                          meta={'proxy': proxy})
+            (ip, port) = address.split(':')
+            yield ProxyItem(ip=ip, port=port)
 
-    def check_ok(self, response):
-        query = 'SELECT * FROM proxy WHERE address=\'%s\';'
-        sql = 'INSERT INTO proxy values(%s);'
+    def parse_kuaidaili(self, response):
+        print(response.request.url)
+        html = response.body
+        html = html.replace('\n', '')
+        sel = Selector(text=html)
 
-        address=response.request.url.split('=')[1]
-        print 'checking ok for proxy address:', address
-        if self.db.query(query%address)==[]:
-            self.db.execute_param(sql, (address,))
+        pattern = '<td>(\d+\.\d+\.\d+\.\d+)</td>[ ]*?<td>(\d+)</td>'
+        list = re.findall(pattern, html)
+        list = map(lambda x: x[0] + ':' + x[1], list)
+        for address in list:
+            (ip, port) = address.split(':')
+            yield ProxyItem(ip=ip, port=port)
 
-    def check_error(self, response):
-        address=response.request.url.split('=')[1]
-        print 'checking error for proxy address:', address
+        links = response.xpath('//a[contains(@href,"/free/inha/")]/@href').extract()
+        for link in links:
+            link = 'http://www.kuaidaili.com' + link
+            yield Request(url=link, callback=self.parse_kuaidaili)

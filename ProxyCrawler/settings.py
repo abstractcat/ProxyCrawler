@@ -13,6 +13,11 @@ BOT_NAME = 'ProxyCrawler'
 SPIDER_MODULES = ['ProxyCrawler.spiders']
 NEWSPIDER_MODULE = 'ProxyCrawler.spiders'
 
-DOWNLOAD_DELAY = 2
+DOWNLOAD_DELAY = 0.5
+
+ITEM_PIPELINES = {
+    'ProxyCrawler.pipelines.ProxycrawlerPipeline': 300
+}
+
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = 'ProxyCrawler (+http://www.yourdomain.com)'
+# USER_AGENT = 'ProxyCrawler (+http://www.yourdomain.com)'
